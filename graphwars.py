@@ -14,7 +14,7 @@ class UndirectedGraph(UserDict):
 
 	def disconnect(self,node1,node2):
 		if node2 not in self[node1]:
-			raise ValueError('Cannot disconnect of non existant edge')
+			raise ValueError('Cannot disconnect non existant edge')
 		del self[node1][node2]	
 		del self[node2][node1]	
 	def set_attr(self, node1, node2, attr, value):
@@ -36,15 +36,12 @@ class UndirectedGraph(UserDict):
 		else:
 			return default
 
-
-
-
 	def common_connections(self, node1, node2):
 		return [i for i in self[node1] if i in self[node2]]
 
 
 class Node(object):
-	
+	# TODO remove graph attribute
 	def __init__(self, x, y, graph):
 		self.x = x
 		self.y = y
@@ -105,7 +102,46 @@ def determinant(matrix):
 		return [tuple(map(row.__getitem__,(index for index in range(len(row)) if index != top_index))) for row in matrix[1:]]
 	return sum(((-1)**index)*value*determinant(get_submatrix(matrix, index)) for index, value in enumerate(matrix[0]))
 
+class Polygon(object):
+	"""a list of points that are made anticlockwise in the begining"""
+	def __init__(self, nodes):
+		if not nodes:
+			raise ValueError('can\'t make polygon with not points')
+		self.nodes = nodes
 
+	def make_anticlockwise(self):
+		'''sorts the nodes in anticlockwis order around their 'center of mass' 
+		starting from the left'''
+
+		# get the center
+		centerx, centery = sum(map(lambda node:node.x,self.nodes))/len(self.nodes), sum(map(lambda node:node.y, self.nodes))
+		# sort the nodes
+		self.nodes.sort(key=lambda node: math.atan2(node.y - centery, node.x - centerx))
+		print(self.nodes)
+
+
+	def get_tangent(self, other, stitch= False):
+		# computes the tangent to another polygon
+		self.make_anticlockwise()
+		pass
+
+
+class Triangle(Polygon):
+	"""three point polygon"""
+	def __init__(self, edge):
+		super().__init__(edge)
+
+	def contains_point(self, point):
+		pass
+
+	def circumcircle_contains_point(self, point):
+		pass
+
+class Line(Polygon):
+	"""two point polygon"""
+	pass
+
+		
 
 class Graph(pygame.Surface):
 	'''
@@ -130,137 +166,62 @@ class Graph(pygame.Surface):
 			new_node = Node(x, y, self)
 			self.vertices.append(new_node)
 		def triangulate_(nodes):
-			#pprint(len(nodes))
+
 			if not nodes:
 				return
 			if len(nodes) <= 3:
-				# print('found a triangle')
-				# print('it has length: ' + str(len(nodes)))
-				# print()
+				# base case 
+				# found a triangle or line or poinr
+
 				try:
+					# found a triangle connect its points
 					self.edges.connect(nodes[1],nodes[2])
 					self.edges.connect(nodes[2],nodes[0])
+					#go anticlockwise around the triangle
 					convex_hull = [nodes[0],nodes[1],nodes[2]] if signed_distance(nodes[0],(nodes[1],nodes[2])) > 0 else [nodes[2],nodes[1],nodes[0]]
 				except IndexError:
 					# there are less than three nodes in the 'triangle'
-					convex_hull = nodes
+					# add them to a convex hull in reverse order of their y
+					# because we know which side they're on this makes them anticlockwise
+					convex_hull = sorted(nodes,key=lambda node:-node.y)
 				try:
+					#found a line connect it
+
 					self.edges.connect(nodes[0],nodes[1])
 				except IndexError:
 					pass
 				return convex_hull
 			else:
-				# print('splitting')
-				half_length = round(len(nodes)/6) * 3# nearest multiple of 3 to half the nodes
-
-
+				# nearest multiple of 3 to half the nodes
+				half_length = round(len(nodes)/6) * 3
+				# split into two halves
 				half1 = nodes[:half_length]
 				half2 = nodes[half_length:]
-				# print('half1: ' + str(len(half1)))
-				# print('half2: ' + str(len(half2)))
-				# print()
-
-				# pprint(half1)
-
-				# print('triangulating half1')
+				# recursivly triangulate each half
 				half1_hull = triangulate_(half1)
-				# print('triangulating half2')
 				half2_hull = triangulate_(half2)
-
-				def get_tangent(side, poly1, poly2):
-
-					poly1_t_index, poly1_t = max(enumerate(poly1), key = lambda node: node[1].x)
-					poly2_t_index, poly2_t  = min(enumerate(poly2), key = lambda node: node[1].x)
-					done= False
-					index_change = ((side == 'top') - (side == 'bottom'))
-					#set the accumulator
-					poly1_next_node_i = poly1_t_index + index_change
-					poly2_next_node_i = poly2_t_index - index_change
-					# make sure in index range 
-					poly1_next_node_i %= len(poly1)
-					poly2_next_node_i %= len(poly2)
-					while not done:
-						done = True # assume done until
-						
-						while signed_distance(poly1[poly1_next_node_i],(poly1_t, poly2_t))* index_change >= 0:
-							# print('failed while trying: ')
-							# pprint([poly1[poly1_next_node_i],poly1_t, poly2_t], indent = 4)
-							# print()
-							# print('changed the first tangent')
-
-							self.edges.connect(poly1_t, poly2_t)
-							poly1_t = poly1[poly1_next_node_i]
-							poly1_next_node_i += index_change
-							poly1_next_node_i %= len(poly1)
-
-						# print('succeded while trying: ')
-						# pprint([poly1[poly1_next_node_i],poly1_t, poly2_t], indent = 4)
-						# print()
-						check = signed_distance(poly1[poly1_next_node_i],(poly1_t, poly2_t))
-						# print('the distance to the next node is: ', check)
-						
-
-						if len(poly2)>1:
-							while signed_distance(poly2[poly2_next_node_i],(poly2_t, poly1_t)) * -index_change >= 0:
-								done = False
-								# print('failed while trying: ')
-								# pprint([poly2[poly2_next_node_i],poly1_t, poly2_t], indent = 4)
-								# print('changed the second tangent')
-								self.edges.connect(poly1_t,poly2_t)
-								poly2_t = poly2[poly2_next_node_i]
-								poly2_next_node_i -= index_change
-								poly2_next_node_i %= len(poly2)
-							# print('succeded while trying: ')
-							# pprint([poly2[poly2_next_node_i],poly1_t, poly2_t], indent = 4)
-							# print()						
-					return (poly1.index(poly1_t), poly1_t), (poly2.index(poly2_t), poly2_t)
-
-				# print('getting the top tangent')
-				(half1_tt_index, half1_tt), (half2_tt_index,half2_tt) = get_tangent('top', half1_hull, half2_hull)				
-				# print(half1_tt_index,half2_tt_index)
-
-				# print('getting the bottom tangent: ')	
-				(half1_bt_index, half1_bt), (half2_bt_index, half2_bt) = get_tangent('bottom', half1_hull, half2_hull)	
-				# print(half1_bt_index, half2_bt_index)
-
-				# print('half1_hull: ')
-				# pprint(half1_hull, indent = 4)
-
+				#get the tangents that connect the halves and stitch them together
+				(half1_tt_index, half1_tt), (half2_tt_index,half2_tt) = self.get_tangent('top', half1_hull, half2_hull)				
+				(half1_bt_index, half1_bt), (half2_bt_index, half2_bt) = self.get_tangent('bottom', half1_hull, half2_hull)	
+				#connect the tangents
+				#find the sides to be included in the convex hull
 				half1_back = []
 				i = half1_tt_index
-				# print('half1_tt: ', half1_hull[half1_tt_index], ' at index: ', half1_tt_index)
-				# print('half1_bt: ', half1_hull[half1_bt_index], ' at index: ', half1_bt_index)
 				while i != half1_bt_index:
 					half1_back.append(half1_hull[i])
-					i +=1
+					i += 1
 					i %= len(half1_hull)
 				half1_back.append(half1_hull[i])
 
-				# print('half1_back: ')
-				# pprint(half1_back)
-				# # # the side facing half2
-				# print('half2_hull: ')
-				# pprint(half2_hull, indent = 4)
-
 				half2_back = []
 				j = half2_bt_index
-				# print('half2_tt: ', half2_hull[half2_tt_index], ' at index: ', half2_tt_index)
-				# print('half2_bt: ', half2_hull[half2_bt_index], ' at index: ', half2_bt_index)
 				while j != half2_tt_index:
-					# print('j:', j)
 					half2_back.append(half2_hull[j])
-					j +=1
+					j += 1
 					j %= len(half2_hull)
 				half2_back.append(half2_hull[j])
-
-				# print('half2_back: ')
-				# pprint(half2_back)
-
-				
-				self.edges.connect(half1_bt,half2_bt)
-				self.edges.connect(half1_tt,half2_tt)
-				convex_hull = half1_back + half2_back
-				return convex_hull
+				# return the convex hull
+				return half1_back + half2_back
 		def triangulate(nodes):
 			nodes.sort(key=lambda node:(node.x,node.y))
 			triangulate_(nodes)
@@ -268,14 +229,14 @@ class Graph(pygame.Surface):
 		def delaunify():
 			#find all the quadrangles
 				# for every node get its connections
-			for A, connections in self.items():
+			for A, connections in self.edges.items():
 				connections = [*connections.keys()]
 				print(A, 'connected_to')
 				#get its connections
 				for B in connections:
 					print('		',B,end ='')
 					print(' common connections', end=' ')
-					common = self.common_connections(A,B)
+					common = self.edges.common_connections(A,B)
 					pprint(common)
 					#filter out the (convex hull) and (triangle within triangle) edges
 					possible_cds = [(c,d) for c in common for d in common if intersect((c,d),(A,B))]
@@ -306,15 +267,47 @@ class Graph(pygame.Surface):
 					if det > 0:
 						#pass
 						#pprint(self.edges.data)
-						self.set_attr(A,B,'color',(0,255,255))
-						self.disconnect(A,B)
-						self.connect(C,D)
+						self.edges.set_attr(A,B,'color',(0,255,255))
+						self.edges.disconnect(A,B)
+						self.edges.connect(C,D)
 						delaunify()
-					# print(det)
-					# check its sign
-					# flipit if positive
-		print('triangulating')
+
 		triangulate(self.vertices)
+
+	def get_tangent(self, side, poly1, poly2):
+
+		poly1_t_index, poly1_t = max(enumerate(poly1), key = lambda node: node[1].x)
+		poly2_t_index, poly2_t  = min(enumerate(poly2), key = lambda node: node[1].x)
+		done= False
+		index_change = ((side == 'top') - (side == 'bottom'))
+		#set the accumulator
+		poly1_next_node_i = poly1_t_index + index_change
+		poly2_next_node_i = poly2_t_index - index_change
+		# make sure in index range 
+		poly1_next_node_i %= len(poly1)
+		poly2_next_node_i %= len(poly2)
+		while not done:
+			done = True # assume done until
+			
+			while signed_distance(poly1[poly1_next_node_i],(poly1_t, poly2_t))* index_change >= 0:
+
+
+				self.edges.connect(poly1_t, poly2_t)
+				poly1_t = poly1[poly1_next_node_i]
+				poly1_next_node_i += index_change
+				poly1_next_node_i %= len(poly1)
+
+			if len(poly2)>1:
+				while signed_distance(poly2[poly2_next_node_i],(poly2_t, poly1_t)) * -index_change >= 0:
+					done = False
+
+					self.edges.connect(poly1_t,poly2_t)
+					poly2_t = poly2[poly2_next_node_i]
+					poly2_next_node_i -= index_change
+					poly2_next_node_i %= len(poly2)
+	
+		self.edges.connect(poly1_t, poly2_t)				
+		return (poly1.index(poly1_t), poly1_t), (poly2.index(poly2_t), poly2_t)
 
 	def draw_nodes(self):
 		for node in self.vertices:
@@ -342,6 +335,8 @@ def main():
 
 		# create the graph
 		background = Graph(10, screen.get_size())
+		p = Polygon([Node(0,0,background),Node(1,1,background),Node(0,1,background),Node(1,-1,background),Node(-1,1,background),Node(-1,0,background),Node(0,-1,background)])
+		p.make_anticlockwise()
 
 
 		# Blit everything to the screen
@@ -362,9 +357,7 @@ def main():
 					return
 			background.fill((250, 250, 250)) # fill the background
 			background.draw_nodes() # draw the nodes
-			background.draw_edges()
-			#background.vertices[1].x = pygame.mouse.get_pos()[0]+10
-			#background.vertices[1].y = pygame.mouse.get_pos()[1]-10
+			background.draw_edges() # draw the edges
 			screen.blit(background, (0, 0))
 			pygame.display.flip()
 	except Exception as e:
